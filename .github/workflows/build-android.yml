@@ -36,7 +36,7 @@ jobs:
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -44,3 +44,4 @@ jobs:
           name: GoTr-Ail-V9.9-debug-apk
           path: GoTr_AI_9_7/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+
