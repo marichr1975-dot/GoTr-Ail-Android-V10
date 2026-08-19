@@ -1,4 +1,5 @@
-import 'dart:io';
+﻿import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart';
@@ -20,23 +21,38 @@ class MwmMapInfo {
   String get sizeLabel => '${(sizeBytes / 1024 / 1024).toStringAsFixed(1)} MB';
 }
 
-/// V9.6 MWM ONLY
+class _ProvinceMap {
+  final String label;
+  final String fileToken;
+  final double lat;
+  final double lon;
+
+  const _ProvinceMap(this.label, this.fileToken, this.lat, this.lon);
+}
+
+/// V9.9 MWM ONLY
 ///
-/// Questo servizio NON prova a reinventare il parser binario di Organic Maps.
-/// Fa una verifica sicura e concreta del file .mwm installato sul telefono:
-/// - lo trova nella cartella privata dell'app;
-/// - verifica che sia leggibile e non vuoto;
-/// - associa la mappa al GPS tramite l'area di test di Venezia.
-///
-/// Il parsing di sentieri/POI/routing arrivera' solo collegando il core Organic Maps.
+/// Se il punto cercato e' in Veneto, sceglie la MWM della provincia piu'
+/// vicina fra quelle installate. In questo modo Pianifica usa Belluno per
+/// Auronzo/Misurina/Cortina invece di limitarsi alla sola Venezia.
 class MwmMapService {
   MwmMapService._();
   static final instance = MwmMapService._();
 
-  static const _veniceMinLat = 44.95;
-  static const _veniceMaxLat = 45.85;
-  static const _veniceMinLon = 11.70;
-  static const _veniceMaxLon = 13.05;
+  static const _venetoMinLat = 44.72;
+  static const _venetoMaxLat = 46.82;
+  static const _venetoMinLon = 10.55;
+  static const _venetoMaxLon = 13.15;
+
+  static const List<_ProvinceMap> _venetoProvinces = [
+    _ProvinceMap('Belluno', 'belluno', 46.14, 12.22),
+    _ProvinceMap('Treviso', 'treviso', 45.67, 12.24),
+    _ProvinceMap('Venezia', 'venezia', 45.44, 12.33),
+    _ProvinceMap('Vicenza', 'vicenza', 45.55, 11.55),
+    _ProvinceMap('Padova', 'padova', 45.41, 11.88),
+    _ProvinceMap('Verona', 'verona', 45.44, 10.99),
+    _ProvinceMap('Rovigo', 'rovigo', 45.07, 11.79),
+  ];
 
   Future<Directory> _mapsDir() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -57,33 +73,51 @@ class MwmMapService {
     return files;
   }
 
-  bool _pointIsInVeniceTestArea(LatLng p) {
-    return p.latitude >= _veniceMinLat &&
-        p.latitude <= _veniceMaxLat &&
-        p.longitude >= _veniceMinLon &&
-        p.longitude <= _veniceMaxLon;
+  bool _isInVeneto(LatLng p) =>
+      p.latitude >= _venetoMinLat &&
+      p.latitude <= _venetoMaxLat &&
+      p.longitude >= _venetoMinLon &&
+      p.longitude <= _venetoMaxLon;
+
+  double _distanceSq(LatLng p, _ProvinceMap province) {
+    final dLat = p.latitude - province.lat;
+    // Compensazione semplice della longitudine alla latitudine del Veneto.
+    final dLon = (p.longitude - province.lon) * math.cos(p.latitude * math.pi / 180.0);
+    return dLat * dLat + dLon * dLon;
+  }
+
+  _ProvinceMap? _nearestVenetoProvince(LatLng p) {
+    if (!_isInVeneto(p)) return null;
+    _ProvinceMap? best;
+    var bestDistance = double.infinity;
+    for (final province in _venetoProvinces) {
+      final d = _distanceSq(p, province);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = province;
+      }
+    }
+    return best;
   }
 
   Future<MwmMapInfo?> mapForPoint(LatLng point) async {
     final files = await installedFiles();
     if (files.isEmpty) return null;
 
-    File? selected;
-    String label = 'Mappa MWM';
+    final province = _nearestVenetoProvince(point);
+    if (province == null) return null;
 
-    if (_pointIsInVeniceTestArea(point)) {
-      for (final file in files) {
-        final n = file.uri.pathSegments.last.toLowerCase();
-        if (n.contains('venezia') || n.contains('venice')) {
-          selected = file;
-          label = 'Venezia';
-          break;
-        }
+    File? selected;
+    for (final file in files) {
+      final name = file.uri.pathSegments.last.toLowerCase();
+      if (name.contains('italy_veneto_') && name.contains(province.fileToken)) {
+        selected = file;
+        break;
       }
     }
 
-    // Fuori dall'area coperta, o se manca la MWM corretta, non usare una mappa a caso.
     if (selected == null) return null;
+
     final stat = await selected.stat();
     bool headerReadable = false;
     try {
@@ -100,7 +134,7 @@ class MwmMapService {
 
     return MwmMapInfo(
       file: selected,
-      regionLabel: label,
+      regionLabel: province.label,
       sizeBytes: stat.size,
       headerReadable: headerReadable,
     );
@@ -108,3 +142,4 @@ class MwmMapService {
 
   Future<String> installPath() async => (await _mapsDir()).path;
 }
+
