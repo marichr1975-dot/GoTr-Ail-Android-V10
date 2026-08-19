@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/saved_route.dart';
 import '../services/gemini_ai_service.dart';
 import '../services/hiking_router.dart';
+import '../services/saved_routes_service.dart';
 
 class AiSuggestionScreen extends StatefulWidget {
   final AiTrailSuggestion suggestion;
@@ -24,6 +26,8 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
   List<LatLng> _route = const [];
   String? _routeError;
   bool _loadingRoute = true;
+  bool _saving = false;
+  bool _saved = false;
 
   AiTrailSuggestion get s => widget.suggestion;
 
@@ -37,6 +41,56 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
     final match = RegExp(r'(\d+(?:[.,]\d+)?)').firstMatch(s.distance);
     if (match == null) return 4;
     return double.tryParse(match.group(1)!.replaceAll(',', '.')) ?? 4;
+  }
+
+  double _routeKm() {
+    if (_route.length < 2) return _wantedKm();
+    const distance = Distance();
+    var meters = 0.0;
+    for (var i = 1; i < _route.length; i++) {
+      meters += distance.as(
+        LengthUnit.Meter,
+        _route[i - 1],
+        _route[i],
+      );
+    }
+    return meters / 1000.0;
+  }
+
+  Future<void> _saveRoute() async {
+    if (_route.length < 2 || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final now = DateTime.now();
+      final route = SavedRoute(
+        id: 'ai_${now.microsecondsSinceEpoch}',
+        title: s.title.trim().isEmpty ? 'Percorso GoTr-AI' : s.title.trim(),
+        savedAt: now,
+        points: List<LatLng>.from(_route),
+        distanceKm: _routeKm(),
+      );
+      await SavedRoutesService.instance.save(route);
+      if (!mounted) return;
+      setState(() => _saved = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Percorso salvato in Salvati.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Non riesco a salvare il percorso: '
+            '${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _buildRealRoute() async {
@@ -81,9 +135,11 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         try {
-          final bounds = LatLngBounds.fromPoints(_route);
           _mapController.fitCamera(
-            CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(26)),
+            CameraFit.bounds(
+              bounds: LatLngBounds.fromPoints(_route),
+              padding: const EdgeInsets.all(22),
+            ),
           );
         } catch (_) {}
       });
@@ -92,6 +148,7 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
 
   void _openFullScreenMap() {
     if (_route.isEmpty) return;
+    final center = LatLng(s.latitude ?? 45.75, s.longitude ?? 11.85);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -106,10 +163,7 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
           ),
           body: FlutterMap(
             options: MapOptions(
-              initialCenter: LatLng(
-                s.latitude ?? 45.75,
-                s.longitude ?? 11.85,
-              ),
+              initialCenter: center,
               initialZoom: 13.5,
               minZoom: 7,
               maxZoom: 18,
@@ -133,12 +187,9 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: LatLng(
-                      s.latitude ?? 45.75,
-                      s.longitude ?? 11.85,
-                    ),
-                    width: 48,
-                    height: 48,
+                    point: center,
+                    width: 46,
+                    height: 46,
                     child: Container(
                       decoration: BoxDecoration(
                         color: _green,
@@ -148,7 +199,7 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
                       child: const Icon(
                         Icons.play_arrow_rounded,
                         color: Colors.white,
-                        size: 28,
+                        size: 27,
                       ),
                     ),
                   ),
@@ -160,6 +211,7 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final center = LatLng(s.latitude ?? 45.75, s.longitude ?? 11.85);
@@ -167,293 +219,303 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FA),
       appBar: AppBar(
-        title: const Text('Percorso proposto',
-            style: TextStyle(fontWeight: FontWeight.w900)),
+        toolbarHeight: 54,
+        title: const Text(
+          'Percorso proposto',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+        ),
         backgroundColor: _blue,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            SizedBox(
-              height: MediaQuery.of(context).size.height * .34,
-              child: Stack(
-                children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: center,
-                      initialZoom: 13.5,
-                      minZoom: 7,
-                      maxZoom: 18,
-                    ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final mapHeight = (constraints.maxHeight * .29).clamp(178.0, 225.0);
+            return Column(
+              children: [
+                SizedBox(
+                  height: mapHeight,
+                  child: Stack(
                     children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.gotr_ai',
-                      ),
-                      if (_route.length >= 2)
-                        PolylineLayer(
-                          polylines: [
-                            Polyline(
-                              points: _route,
-                              strokeWidth: 6,
-                              color: _blue,
-                              borderStrokeWidth: 2,
-                              borderColor: Colors.white,
-                            ),
-                          ],
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: center,
+                          initialZoom: 13.5,
+                          minZoom: 7,
+                          maxZoom: 18,
                         ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: center,
-                            width: 48,
-                            height: 48,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _green,
-                                shape: BoxShape.circle,
-                                border:
-                                    Border.all(color: Colors.white, width: 3),
-                              ),
-                              child: const Icon(Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 28),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.gotr_ai',
+                          ),
+                          if (_route.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: _route,
+                                  strokeWidth: 6,
+                                  color: _blue,
+                                  borderStrokeWidth: 2,
+                                  borderColor: Colors.white,
+                                ),
+                              ],
                             ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: center,
+                                width: 46,
+                                height: 46,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: _green,
+                                    shape: BoxShape.circle,
+                                    border:
+                                        Border.all(color: Colors.white, width: 3),
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 27,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      elevation: 2,
-                      child: IconButton(
-                        onPressed: _route.isEmpty ? null : _openFullScreenMap,
-                        icon: const Icon(Icons.fullscreen_rounded),
-                        color: _blue,
-                        tooltip: 'Apri mappa a schermo intero',
-                      ),
-                    ),
-                  ),                  if (_loadingRoute)
-                    const Positioned.fill(
-                      child: ColoredBox(
-                        color: Color(0x66000000),
-                        child: Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  if (!_loadingRoute && _routeError != null)
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      bottom: 12,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Material(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _routeError!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.w700,
+                          borderRadius: BorderRadius.circular(11),
+                          elevation: 2,
+                          child: IconButton(
+                            onPressed:
+                                _route.isEmpty ? null : _openFullScreenMap,
+                            icon: const Icon(Icons.fullscreen_rounded),
+                            color: _blue,
+                            tooltip: 'Apri mappa a schermo intero',
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
-                children: [
-                  Text(
-                    s.title,
-                    style: const TextStyle(
-                      color: _ink,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _InfoCard(
-                          icon: Icons.route_rounded,
-                          label: 'Tipo',
-                          value: s.routeType,
+                      if (_loadingRoute)
+                        const Positioned.fill(
+                          child: ColoredBox(
+                            color: Color(0x55000000),
+                            child: Center(
+                              child:
+                                  CircularProgressIndicator(color: Colors.white),
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _InfoCard(
-                          icon: Icons.straighten_rounded,
-                          label: 'Distanza',
-                          value: s.distance,
+                      if (!_loadingRoute && _routeError != null)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              _routeError!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  _InfoCard(
-                    icon: Icons.trending_up_rounded,
-                    label: 'Difficolta',
-                    value: s.difficulty,
-                    horizontal: true,
-                  ),
-                  const SizedBox(height: 10),
-                  if (s.summary.trim().isNotEmpty)
-                    Text(
-                      s.summary,
-                      style: const TextStyle(
-                        color: Color(0xFF526574),
-                        fontSize: 13.5,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    child: Column(
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            s.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 20,
+                              height: 1.05,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _CompactInfo(
+                                icon: Icons.route_rounded,
+                                text: s.routeType,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: _CompactInfo(
+                                icon: Icons.straighten_rounded,
+                                text: s.distance,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: _CompactInfo(
+                                icon: Icons.trending_up_rounded,
+                                text: s.difficulty,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              s.summary.trim().isEmpty
+                                  ? 'Percorso pronto.'
+                                  : s.summary,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF526574),
+                                fontSize: 13.2,
+                                height: 1.28,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _route.length >= 2 ? _saveRoute : null,
+                                icon: _saving
+                                    ? const SizedBox(
+                                        width: 17,
+                                        height: 17,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        _saved
+                                            ? Icons.bookmark_added_rounded
+                                            : Icons.bookmark_add_outlined,
+                                      ),
+                                label: Text(
+                                  _saved ? 'SALVATO' : 'SALVA',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(50),
+                                  foregroundColor: _blue,
+                                  side:
+                                      const BorderSide(color: _blue, width: 1.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: FilledButton.icon(
+                                onPressed: _route.length >= 2 ? () {} : null,
+                                icon: const Icon(Icons.navigation_rounded),
+                                label: const Text(
+                                  'INIZIA PERCORSO',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(50),
+                                  backgroundColor: _green,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _route.length >= 2 ? () {} : null,
-                          icon: const Icon(Icons.bookmark_add_outlined),
-                          label: const Text(
-                            'Salva percorso',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(54),
-                            foregroundColor: _blue,
-                            side: const BorderSide(color: _blue, width: 1.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _route.length >= 2 ? () {} : null,
-                          icon: const Icon(Icons.schedule_rounded),
-                          label: const Text(
-                            'Salva per dopo',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(54),
-                            foregroundColor: _blue,
-                            side: const BorderSide(color: _blue, width: 1.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _route.length >= 2 ? () {} : null,
-                          icon: const Icon(Icons.navigation_rounded),
-                          label: const Text(
-                            'Inizia percorso',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(54),
-                            backgroundColor: _green,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
+class _CompactInfo extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final String value;
-  final bool horizontal;
+  final String text;
 
-  const _InfoCard({
+  const _CompactInfo({
     required this.icon,
-    required this.label,
-    required this.value,
-    this.horizontal = false,
+    required this.text,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE0E8EE)),
       ),
-      child: horizontal
-          ? Row(
-              children: [
-                Icon(icon, color: const Color(0xFF0B5FD7), size: 20),
-                const SizedBox(width: 8),
-                Text('$label: ',
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-                Flexible(
-                  child: Text(value,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, color: const Color(0xFF0B5FD7), size: 20),
-                const SizedBox(height: 7),
-                Text(label,
-                    style: const TextStyle(
-                        color: Color(0xFF627383),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(value,
-                    style: const TextStyle(
-                        color: Color(0xFF112234),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900)),
-              ],
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF0B5FD7), size: 18),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF112234),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w900,
+              ),
             ),
+          ),
+        ],
+      ),
     );
   }
 }
-
 
