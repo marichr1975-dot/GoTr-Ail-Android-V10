@@ -90,6 +90,76 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
     }
   }
 
+  void _openFullScreenMap() {
+    if (_route.isEmpty) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              'Mappa percorso',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            backgroundColor: _blue,
+            foregroundColor: Colors.white,
+          ),
+          body: FlutterMap(
+            options: MapOptions(
+              initialCenter: LatLng(
+                s.latitude ?? 45.75,
+                s.longitude ?? 11.85,
+              ),
+              initialZoom: 13.5,
+              minZoom: 7,
+              maxZoom: 18,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.gotr_ai',
+              ),
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _route,
+                    strokeWidth: 6,
+                    color: _blue,
+                    borderStrokeWidth: 2,
+                    borderColor: Colors.white,
+                  ),
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(
+                      s.latitude ?? 45.75,
+                      s.longitude ?? 11.85,
+                    ),
+                    width: 48,
+                    height: 48,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _green,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final center = LatLng(s.latitude ?? 45.75, s.longitude ?? 11.85);
@@ -106,7 +176,7 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
         child: Column(
           children: [
             SizedBox(
-              height: MediaQuery.of(context).size.height * .47,
+              height: MediaQuery.of(context).size.height * .34,
               child: Stack(
                 children: [
                   FlutterMap(
@@ -156,7 +226,21 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
                       ),
                     ],
                   ),
-                  if (_loadingRoute)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      elevation: 2,
+                      child: IconButton(
+                        onPressed: _route.isEmpty ? null : _openFullScreenMap,
+                        icon: const Icon(Icons.fullscreen_rounded),
+                        color: _blue,
+                        tooltip: 'Apri mappa a schermo intero',
+                      ),
+                    ),
+                  ),                  if (_loadingRoute)
                     const Positioned.fill(
                       child: ColoredBox(
                         color: Color(0x66000000),
@@ -240,22 +324,70 @@ class _AiSuggestionScreenState extends State<AiSuggestionScreen> {
                       ),
                     ),
                   const SizedBox(height: 14),
-                  SizedBox(
-                    height: 54,
-                    child: FilledButton.icon(
-                      onPressed: _route.length >= 2 ? () {} : null,
-                      icon: const Icon(Icons.navigation_rounded),
-                      label: const Text(
-                        'INIZIA PERCORSO',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _green,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _route.length >= 2 ? () {} : null,
+                          icon: const Icon(Icons.bookmark_add_outlined),
+                          label: const Text(
+                            'Salva percorso',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(54),
+                            foregroundColor: _blue,
+                            side: const BorderSide(color: _blue, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _route.length >= 2 ? () {} : null,
+                          icon: const Icon(Icons.schedule_rounded),
+                          label: const Text(
+                            'Salva per dopo',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(54),
+                            foregroundColor: _blue,
+                            side: const BorderSide(color: _blue, width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _route.length >= 2 ? () {} : null,
+                          icon: const Icon(Icons.navigation_rounded),
+                          label: const Text(
+                            'Inizia percorso',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(54),
+                            backgroundColor: _green,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -323,4 +455,5 @@ class _InfoCard extends StatelessWidget {
     );
   }
 }
+
 
