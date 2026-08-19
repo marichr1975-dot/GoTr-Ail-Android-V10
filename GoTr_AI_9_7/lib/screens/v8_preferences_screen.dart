@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../services/gemini_ai_service.dart';
 import '../services/gps_service.dart';
 import '../services/location_search_service.dart';
 import 'ai_suggestion_screen.dart';
+import 'ai_creating_screen.dart';
 
 import 'home_screen.dart';
 import 'v8_choice_screen.dart';
@@ -42,7 +43,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
     try {
       double? lat;
       double? lon;
-      var placeLabel = widget.mode == V8Mode.plan ? (widget.place ?? 'Località pianificata') : 'Posizione GPS';
+      var placeLabel = widget.mode == V8Mode.plan ? (widget.place ?? 'LocalitÃ  pianificata') : 'Posizione GPS';
 
       if (widget.mode == V8Mode.start) {
         final p = await GpsService.currentPosition();
@@ -51,7 +52,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
       } else if ((widget.place ?? '').trim().isNotEmpty) {
         final found = await LocationSearchService.instance.search(widget.place!.trim());
         if (found == null) {
-          throw Exception('Località non trovata. Controlla il nome oppure prova con Internet attivo.');
+          throw Exception('LocalitÃ  non trovata. Controlla il nome oppure prova con Internet attivo.');
         }
         lat = found.point.latitude;
         lon = found.point.longitude;
@@ -77,7 +78,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => _AiCreatingScreen(suggestionFuture: suggestionFuture),
+          builder: (_) => AiCreatingScreen(suggestionFuture: suggestionFuture),
         ),
       );
     } catch (e) {
@@ -173,7 +174,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
                               children: [
                                 const Icon(Icons.place_rounded, color: Color(0xFFDCEEFF), size: 13),
                                 const SizedBox(width: 3),
-                                Flexible(child: Text('${widget.activity} · $placeLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFEAF4FF), fontSize: 10.5, fontWeight: FontWeight.w700))),
+                                Flexible(child: Text('${widget.activity} Â· $placeLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFEAF4FF), fontSize: 10.5, fontWeight: FontWeight.w700))),
                               ],
                             ),
                           ],
@@ -200,7 +201,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
                           ],
                         ),
                         SizedBox(height: gap),
-                        _sectionTitle(Icons.trending_up_rounded, 'Difficoltà'),
+                        _sectionTitle(Icons.trending_up_rounded, 'DifficoltÃ '),
                         SizedBox(height: compact ? 5 : 7),
                         Row(
                           children: [
@@ -272,7 +273,7 @@ class _V8PreferencesScreenState extends State<V8PreferencesScreen> {
                       icon: _aiWorking
                           ? const SizedBox(width: 21, height: 21, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
                           : const Icon(Icons.auto_awesome_rounded, size: 21),
-                      label: Text(_aiWorking ? 'GEMINI STA CREANDO…' : 'CREA CON AI', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: .35)),
+                      label: Text(_aiWorking ? 'GEMINI STA CREANDOâ€¦' : 'CREA CON AI', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: .35)),
                       style: FilledButton.styleFrom(backgroundColor: _green, disabledBackgroundColor: _green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
                     ),
                   ),
@@ -431,7 +432,7 @@ class _AiCreatingScreenState extends State<_AiCreatingScreen>
                           ? 'Non sono riuscito a creare il percorso'
                           : ready
                               ? 'Percorso creato!'
-                              : 'Sto creando il tuo percorso…',
+                              : 'Sto creando il tuo percorsoâ€¦',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: _ink,
@@ -443,8 +444,8 @@ class _AiCreatingScreenState extends State<_AiCreatingScreen>
                     Text(
                       _error ??
                           (ready
-                              ? 'La proposta è pronta.'
-                              : 'GoTr-AI sta preparando la proposta più adatta alle tue scelte.'),
+                              ? 'La proposta Ã¨ pronta.'
+                              : 'GoTr-AI sta preparando la proposta piÃ¹ adatta alle tue scelte.'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFF627383),
@@ -486,7 +487,7 @@ class _AiCreatingScreenState extends State<_AiCreatingScreen>
                         ? 'VISUALIZZA PERCORSO'
                         : _error != null
                             ? 'TORNA INDIETRO'
-                            : 'ATTENDI…',
+                            : 'ATTENDIâ€¦',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
@@ -509,3 +510,4 @@ class _AiCreatingScreenState extends State<_AiCreatingScreen>
     );
   }
 }
+
