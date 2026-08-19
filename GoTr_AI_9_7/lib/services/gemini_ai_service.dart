@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -39,6 +39,14 @@ class AiTrailSuggestion {
   final String distance;
   final List<String> reasons;
   final List<String> cautions;
+  final String place;
+  final double? latitude;
+  final double? longitude;
+  final bool dog;
+  final bool children;
+  final bool forest;
+  final bool rock;
+  final bool loop;
 
   const AiTrailSuggestion({
     required this.title,
@@ -48,6 +56,14 @@ class AiTrailSuggestion {
     required this.distance,
     required this.reasons,
     required this.cautions,
+    this.place = '',
+    this.latitude,
+    this.longitude,
+    this.dog = false,
+    this.children = false,
+    this.forest = false,
+    this.rock = false,
+    this.loop = true,
   });
 
   factory AiTrailSuggestion.fromJson(Map<String, dynamic> json) {
@@ -65,6 +81,24 @@ class AiTrailSuggestion {
       cautions: strings(json['cautions']),
     );
   }
+
+  AiTrailSuggestion withRequest(AiTrailRequest r) => AiTrailSuggestion(
+        title: title,
+        summary: summary,
+        routeType: routeType,
+        difficulty: difficulty,
+        distance: distance,
+        reasons: reasons,
+        cautions: cautions,
+        place: r.place,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        dog: r.dog,
+        children: r.children,
+        forest: r.forest,
+        rock: r.rock,
+        loop: r.loop,
+      );
 }
 
 class GeminiAiService {
@@ -72,8 +106,6 @@ class GeminiAiService {
   static final instance = GeminiAiService._();
 
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  // Flash-Lite è ottimizzato da Google per bassa latenza: qui serve una
-  // scelta breve e strutturata, non ragionamento lungo.
   static const _model = 'gemini-3.5-flash-lite';
 
   bool get configured => _apiKey.trim().isNotEmpty;
@@ -93,16 +125,16 @@ class GeminiAiService {
 Sei il motore AI di GoTr-AI, app per escursionisti non esperti.
 Devi interpretare le preferenze dell'utente e proporre un PROFILO DI PERCORSO prudente.
 Non inventare numeri di sentiero, rifugi, fontane, cascate o nomi di luoghi non presenti nei dati forniti.
-Non affermare che un percorso reale esiste: la geometria verrà verificata dalla mappa offline di GoTr-AI nel passo successivo.
-Se ci sono bambini o cane, privilegia sicurezza, pendenze moderate, fondo semplice e possibilità di rientro.
+Non affermare che un percorso reale esiste: la geometria verra verificata dalla mappa di GoTr-AI nel passo successivo.
+Se ci sono bambini o cane, privilegia sicurezza, pendenze moderate, fondo semplice e possibilita di rientro.
 Rispondi esclusivamente nel JSON richiesto.
 
 DATI UTENTE:
-- attività: ${request.activity}
+- attivita: ${request.activity}
 - zona: ${request.place}
 - posizione: $position
 - distanza desiderata: ${request.distance}
-- difficoltà: ${request.difficulty}
+- difficolta: ${request.difficulty}
 - cane: ${request.dog}
 - bambini: ${request.children}
 - bosco: ${request.forest}
@@ -195,6 +227,10 @@ DATI UTENTE:
     final raw = parts.first['text'].toString();
     final json = jsonDecode(raw);
     if (json is! Map) throw Exception('Risposta Gemini non valida.');
-    return AiTrailSuggestion.fromJson(Map<String, dynamic>.from(json));
+
+    return AiTrailSuggestion
+        .fromJson(Map<String, dynamic>.from(json))
+        .withRequest(request);
   }
 }
+
