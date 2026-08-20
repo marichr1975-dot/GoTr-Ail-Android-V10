@@ -1,29 +1,23 @@
-# GoTr-Ail Android V9.9
+﻿# GoTr-Ail Android V10 - base ricostruita
 
-## VERSIONE ARCHIVIATA - V9.9
+Questa repository e' stata ricostruita dalla base stabile V9.9 e dai collegamenti
+recuperati dall'APK V10 funzionante.
 
-Questa versione viene conservata come riferimento storico.
-Non e' piu' la base principale per lo sviluppo.
+## Stato
+- Gemini: codice della V9.9 mantenuto, usa GEMINI_API_KEY tramite --dart-define.
+- Mappe MWM: download automatico dalla repository marichr1975-dot/nuove-mappe.
+- Release mappe: organic-test-mwm-v1.
+- Cartella locale mappe: gotr_maps.
+- Nessun fallback intenzionale alle vecchie MBTiles per la selezione della MWM.
 
-### STATO V9.9
+## File V10 recuperati/ricostruiti
+- lib/services/mwm_release_service.dart
+- lib/services/mwm_map_service.dart
+- lib/screens/mwm_download_progress_dialog.dart
+- collegamento download in home_screen.dart
+- collegamento download in planning_map_screen.dart
 
-- Gemini: ATTIVO / FUNZIONANTE
-- Nuove mappe MWM: COLLEGAMENTO ALLE GITHUB RELEASES NON COMPLETATO
-- Sono ancora presenti parti del precedente sistema di gestione/download mappe
-
-La V9.9 NON deve essere utilizzata come riferimento
-per il sistema mappe attuale.
-
-Lo sviluppo prosegue dalla V10 funzionante,
-da congelare come nuovo punto sicuro con:
-
-- Gemini funzionante
-- nuove mappe MWM funzionanti
-- collegamento alle Releases funzionante
-
-## IMPORTANTE
-
-NON ELIMINARE questa repository.
-
-La V9.9 rimane un riferimento storico utile,
-soprattutto per Gemini e per confrontare le versioni successive.
+## Build
+La GitHub Action Build V10 APK esegue analyze e build debug.
+Per avere Gemini funzionante nell'APK prodotto da GitHub, creare il secret:
+GEMINI_API_KEY.

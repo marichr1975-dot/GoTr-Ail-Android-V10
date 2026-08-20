@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart' hide Theme;
 import 'package:flutter_map/flutter_map.dart';
@@ -10,6 +10,7 @@ import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 
 import '../services/location_search_service.dart';
 import '../services/mwm_map_service.dart';
+import 'mwm_download_progress_dialog.dart';
 import 'v8_choice_screen.dart';
 
 class PlanningMapScreen extends StatefulWidget {
@@ -42,7 +43,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
 
   Future<void> _prepare() async {
     // 8.8: niente aggiornamenti/download automatici all'apertura di Pianifica.
-    // Una MBTiles già presente (anche copiata via PowerShell) ha priorità.
+    // Una MBTiles giÃ  presente (anche copiata via PowerShell) ha prioritÃ .
     if (mounted) setState(() => _preparing = false);
   }
 
@@ -74,7 +75,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
       }
 
       // V9.6: SOLO MWM. Nessun download/fallback alle vecchie MBTiles.
-      final mwm = await MwmMapService.instance.mapForPoint(found.point);
+      final mwm = await MwmDownloadProgressDialog.ensureForTextAndPoint(context, found.label, found.point);
       if (!mounted) return;
 
       if (mwm == null) {
@@ -82,8 +83,8 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
           SnackBar(
             duration: const Duration(seconds: 6),
             content: Text(
-              'Per ${found.label} manca la mappa .mwm corretta. '
-              'GoTr-Ail non userà né scaricherà le vecchie mappe.',
+              'Per ${found.label} non trovo una mappa .mwm disponibile sul server. '
+              'GoTr-Ail non userÃ  nÃ© scaricherÃ  le vecchie mappe.',
             ),
           ),
         );
@@ -97,7 +98,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${mwm.regionLabel} MWM pronta · ${mwm.sizeLabel}')),
+        SnackBar(content: Text('${mwm.regionLabel} MWM pronta Â· ${mwm.sizeLabel}')),
       );
 
       await Navigator.of(context).push(
@@ -188,7 +189,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
             }
           },
 
-          // Località: finalmente nomi visibili sulla cartografia.
+          // LocalitÃ : finalmente nomi visibili sulla cartografia.
           {
             'id': 'place-labels',
             'type': 'symbol',
@@ -226,7 +227,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
             'paint': {'text-color': '#3f3934', 'text-halo-color': '#fffdf7', 'text-halo-width': 1.5}
           },
 
-          // POI utili a GoTr-Ail. Usiamo simboli geometrici + testo, così sono offline
+          // POI utili a GoTr-Ail. Usiamo simboli geometrici + testo, cosÃ¬ sono offline
           // e non dipendono da sprite esterni.
           {'id': 'hut-dot', 'type': 'circle', 'source': 'openmaptiles', 'source-layer': 'poi', 'minzoom': 12, 'filter': ['in', 'subclass', 'alpine_hut', 'wilderness_hut'], 'paint': {'circle-radius': 5.2, 'circle-color': '#2f7d32', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5}},
           {'id': 'hut-name', 'type': 'symbol', 'source': 'openmaptiles', 'source-layer': 'poi', 'minzoom': 12, 'filter': ['in', 'subclass', 'alpine_hut', 'wilderness_hut'], 'layout': {'text-field': '{name:latin}', 'text-size': 11, 'text-offset': [0, 1.2], 'text-allow-overlap': false}, 'paint': {'text-color': '#155a1b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5}},
@@ -248,9 +249,9 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
     if (_totalBytes > 0) {
       final total = (_totalBytes / 1024 / 1024).toStringAsFixed(1);
       final pct = ((_receivedBytes / _totalBytes) * 100).clamp(0, 100).round();
-      return 'Scarico $_activeMapName… $pct%  ($received / $total MB)';
+      return 'Scarico $_activeMapNameâ€¦ $pct%  ($received / $total MB)';
     }
-    return 'Scarico $_activeMapName… $received MB';
+    return 'Scarico $_activeMapNameâ€¦ $received MB';
   }
 
   @override
@@ -307,7 +308,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Cerca una località. GoTr-AI individua automaticamente la mappa disponibile per quelle coordinate e, se serve, la scarica per l’uso offline.',
+                            'Cerca una localitÃ . GoTr-AI individua automaticamente la mappa disponibile per quelle coordinate e, se serve, la scarica per lâ€™uso offline.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, height: 1.35),
                           ),
@@ -437,7 +438,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'Ricerca © OpenStreetMap contributors',
+                  'Ricerca Â© OpenStreetMap contributors',
                   style: TextStyle(fontSize: 9, color: Colors.black54),
                 ),
               ),
@@ -466,7 +467,7 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
                       const SizedBox(height: 12),
                       Text(_downloadLabel, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
-                      const Text('Non chiudere l’app durante il download.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+                      const Text('Non chiudere lâ€™app durante il download.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
                     ],
                   ),
                 ),
@@ -477,3 +478,4 @@ class _PlanningMapScreenState extends State<PlanningMapScreen> {
     );
   }
 }
+

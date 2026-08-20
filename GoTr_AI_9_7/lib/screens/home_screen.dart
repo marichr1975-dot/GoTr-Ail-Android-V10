@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'saved_routes_screen.dart';
 import '../services/gps_service.dart';
 import '../services/mwm_map_service.dart';
 import 'planning_map_screen.dart';
+import 'mwm_download_progress_dialog.dart';
 import 'v8_choice_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -26,7 +27,7 @@ class HomeScreen extends StatelessWidget {
           children: [
             SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.6)),
             SizedBox(width: 16),
-            Expanded(child: Text('Cerco la tua posizione GPS…', style: TextStyle(fontWeight: FontWeight.w700))),
+            Expanded(child: Text('Cerco la tua posizione GPSâ€¦', style: TextStyle(fontWeight: FontWeight.w700))),
           ],
         ),
       ),
@@ -34,7 +35,7 @@ class HomeScreen extends StatelessWidget {
 
     try {
       final point = await GpsService.currentPosition();
-      final mwm = await MwmMapService.instance.mapForPoint(point);
+      final mwm = await MwmDownloadProgressDialog.ensureForPoint(context, point);
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
 
@@ -42,7 +43,7 @@ class HomeScreen extends StatelessWidget {
         final path = await MwmMapService.instance.installPath();
         messenger.showSnackBar(SnackBar(
           duration: const Duration(seconds: 7),
-          content: Text('GPS OK, ma nessuna .mwm valida trovata. Copia Italy_Veneto_Venezia.mwm in: $path'),
+          content: Text('GPS OK, ma non trovo una mappa disponibile sul server per questa zona. Cartella locale: $path'),
         ));
         return;
       }
@@ -70,7 +71,7 @@ class HomeScreen extends StatelessWidget {
           ),
           content: Text(
             '${mwm.regionLabel}\n\n'
-            'La mappa della zona è già disponibile offline.',
+            'La mappa della zona Ã¨ giÃ  disponibile offline.',
             style: const TextStyle(
               fontWeight: FontWeight.w600,
               height: 1.35,
@@ -104,7 +105,7 @@ class HomeScreen extends StatelessWidget {
           builder: (dialogContext) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: const Text('Uscire da GoTr-AI?', style: TextStyle(fontWeight: FontWeight.w900)),
-            content: const Text('Vuoi chiudere l’app?'),
+            content: const Text('Vuoi chiudere lâ€™app?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('NO')),
               FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('ESCI')),
@@ -260,3 +261,4 @@ class _HomeAction extends StatelessWidget {
     );
   }
 }
+

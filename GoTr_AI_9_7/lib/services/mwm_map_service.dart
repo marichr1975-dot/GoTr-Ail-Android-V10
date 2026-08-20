@@ -1,9 +1,11 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'mwm_release_service.dart';
 
 class MwmMapInfo {
   final File file;
@@ -21,37 +23,31 @@ class MwmMapInfo {
   String get sizeLabel => '${(sizeBytes / 1024 / 1024).toStringAsFixed(1)} MB';
 }
 
-class _ProvinceMap {
+class _Area {
   final String label;
-  final String fileToken;
+  final String token;
   final double lat;
   final double lon;
-
-  const _ProvinceMap(this.label, this.fileToken, this.lat, this.lon);
+  const _Area(this.label, this.token, this.lat, this.lon);
 }
 
-/// V9.9 MWM ONLY
-///
-/// Se il punto cercato e' in Veneto, sceglie la MWM della provincia piu'
-/// vicina fra quelle installate. In questo modo Pianifica usa Belluno per
-/// Auronzo/Misurina/Cortina invece di limitarsi alla sola Venezia.
 class MwmMapService {
   MwmMapService._();
   static final instance = MwmMapService._();
 
-  static const _venetoMinLat = 44.72;
-  static const _venetoMaxLat = 46.82;
-  static const _venetoMinLon = 10.55;
-  static const _venetoMaxLon = 13.15;
-
-  static const List<_ProvinceMap> _venetoProvinces = [
-    _ProvinceMap('Belluno', 'belluno', 46.14, 12.22),
-    _ProvinceMap('Treviso', 'treviso', 45.67, 12.24),
-    _ProvinceMap('Venezia', 'venezia', 45.44, 12.33),
-    _ProvinceMap('Vicenza', 'vicenza', 45.55, 11.55),
-    _ProvinceMap('Padova', 'padova', 45.41, 11.88),
-    _ProvinceMap('Verona', 'verona', 45.44, 10.99),
-    _ProvinceMap('Rovigo', 'rovigo', 45.07, 11.79),
+  static const _areas = <_Area>[
+    _Area('Belluno', 'italy_veneto_belluno', 46.14, 12.22),
+    _Area('Treviso', 'italy_veneto_treviso', 45.67, 12.24),
+    _Area('Venezia', 'italy_veneto_venezia', 45.44, 12.33),
+    _Area('Vicenza', 'italy_veneto_vicenza', 45.55, 11.55),
+    _Area('Padova', 'italy_veneto_padova', 45.41, 11.88),
+    _Area('Verona', 'italy_veneto_verona', 45.44, 10.99),
+    _Area('Rovigo', 'italy_veneto_rovigo', 45.07, 11.79),
+    _Area('Udine', 'italy_friuli-venezia giulia_udine', 46.06, 13.24),
+    _Area('Pordenone', 'italy_friuli-venezia giulia_pordenone', 45.96, 12.66),
+    _Area('Gorizia', 'italy_friuli-venezia giulia_gorizia', 45.94, 13.62),
+    _Area('Trieste', 'italy_friuli-venezia giulia_trieste', 45.65, 13.77),
+    _Area('Trentino-Alto Adige', 'italy_trentino-alto adige sudtirol', 46.50, 11.35),
   ];
 
   Future<Directory> _mapsDir() async {
@@ -73,51 +69,79 @@ class MwmMapService {
     return files;
   }
 
-  bool _isInVeneto(LatLng p) =>
-      p.latitude >= _venetoMinLat &&
-      p.latitude <= _venetoMaxLat &&
-      p.longitude >= _venetoMinLon &&
-      p.longitude <= _venetoMaxLon;
-
-  double _distanceSq(LatLng p, _ProvinceMap province) {
-    final dLat = p.latitude - province.lat;
-    // Compensazione semplice della longitudine alla latitudine del Veneto.
-    final dLon = (p.longitude - province.lon) * math.cos(p.latitude * math.pi / 180.0);
-    return dLat * dLat + dLon * dLon;
-  }
-
-  _ProvinceMap? _nearestVenetoProvince(LatLng p) {
-    if (!_isInVeneto(p)) return null;
-    _ProvinceMap? best;
+  _Area? _nearestArea(LatLng p) {
+    if (p.latitude < 44.6 ||
+        p.latitude > 47.2 ||
+        p.longitude < 10.3 ||
+        p.longitude > 14.1) {
+      return null;
+    }
+    _Area? best;
     var bestDistance = double.infinity;
-    for (final province in _venetoProvinces) {
-      final d = _distanceSq(p, province);
+    for (final area in _areas) {
+      final dLat = p.latitude - area.lat;
+      final dLon = (p.longitude - area.lon) *
+          math.cos(p.latitude * math.pi / 180.0);
+      final d = dLat * dLat + dLon * dLon;
       if (d < bestDistance) {
         bestDistance = d;
-        best = province;
+        best = area;
       }
     }
     return best;
   }
 
   Future<MwmMapInfo?> mapForPoint(LatLng point) async {
+    final area = _nearestArea(point);
+    if (area == null) return null;
     final files = await installedFiles();
-    if (files.isEmpty) return null;
-
-    final province = _nearestVenetoProvince(point);
-    if (province == null) return null;
-
     File? selected;
     for (final file in files) {
       final name = file.uri.pathSegments.last.toLowerCase();
-      if (name.contains('italy_veneto_') && name.contains(province.fileToken)) {
+      if (name.contains(area.token.toLowerCase())) {
         selected = file;
         break;
       }
     }
-
     if (selected == null) return null;
+    return _validate(selected, area.label);
+  }
 
+  Future<MwmMapInfo?> ensureForPoint(
+    LatLng point, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final local = await mapForPoint(point);
+    if (local != null) return local;
+    final downloaded = await MwmReleaseService.instance.ensureForPoint(
+      point,
+      onProgress: onProgress,
+    );
+    if (downloaded == null) return null;
+    return mapForPoint(point);
+  }
+
+  Future<MwmMapInfo?> ensureForTextAndPoint(
+    String text,
+    LatLng point, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final local = await mapForPoint(point);
+    if (local != null) return local;
+
+    final downloaded = await MwmReleaseService.instance.ensureForText(
+          text,
+          onProgress: onProgress,
+        ) ??
+        await MwmReleaseService.instance.ensureForPoint(
+          point,
+          onProgress: onProgress,
+        );
+    if (downloaded == null) return null;
+    return mapForPoint(point);
+  }
+
+  Future<MwmMapInfo?> _validate(File selected, String label) async {
     final stat = await selected.stat();
     bool headerReadable = false;
     try {
@@ -129,12 +153,11 @@ class MwmMapService {
     } catch (_) {
       headerReadable = false;
     }
-
     if (stat.size < 1024 * 1024 || !headerReadable) return null;
 
     return MwmMapInfo(
       file: selected,
-      regionLabel: province.label,
+      regionLabel: label,
       sizeBytes: stat.size,
       headerReadable: headerReadable,
     );
@@ -142,4 +165,3 @@ class MwmMapService {
 
   Future<String> installPath() async => (await _mapsDir()).path;
 }
-
